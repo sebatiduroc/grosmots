@@ -682,7 +682,7 @@ function submitWord(){
   const word = path.map(i => board[i]).join('');
   if (foundWords.has(word)){
     setFeedback(word + ' — déjà trouvé', 'bad');
-    speak(word + ' déjà trouvé', { rate: 1, interrupt: false });
+    speak(word.toLowerCase() + ' déjà trouvé', { rate: 1, interrupt: false });
     scheduleClear();
     return;
   }
@@ -695,7 +695,7 @@ function submitWord(){
   foundWords.add(word);
   foundCountEl.textContent = foundWords.size + (foundWords.size > 1 ? ' mots' : ' mot');
   setFeedback(word + ' trouvé !', 'ok');
-  speak(word + ' trouvé', { rate: 1, interrupt: false });
+  speak(word.toLowerCase() + ' trouvé', { rate: 1, interrupt: false });
   scheduleClear();
 }
 
