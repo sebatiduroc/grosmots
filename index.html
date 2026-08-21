@@ -396,9 +396,9 @@ function initVoiceToggle(){
     const turningOn = !voiceOn;
     if (turningOn){
       voiceOn = true;
-      speak('Son actif', { rate: 1 });
+      speak('Son. Actif.', { rate: 1 });
     } else {
-      speak('Son inactif', { rate: 1 }); // annoncé avant la coupure effective
+      speak('Son. Inactif.', { rate: 1 }); // annoncé avant la coupure effective
       voiceOn = false;
     }
     btn.textContent = voiceOn ? '🔊' : '🔇';
