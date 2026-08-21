@@ -236,13 +236,20 @@
     border-top:3px solid #333;
     border-bottom:3px solid #333;
   }
-  #foundList span{
+  #foundList button{
     background:var(--tile-bg);
     border:2px solid var(--tile-border);
     border-radius:10px;
-    padding:8px 12px;
+    padding:10px 14px;
     font-size: clamp(1rem, 4.5vw, 1.3rem);
+    font-weight:800;
+    color:var(--fg);
     letter-spacing:.03em;
+  }
+  #foundList button:active{
+    background:var(--tile-active);
+    color:var(--tile-active-fg);
+    border-color:var(--tile-active);
   }
   .end-actions{
     width:100%; max-width:560px;
@@ -386,8 +393,14 @@ function initVoiceToggle(){
   const btn = document.getElementById('voiceToggleBtn');
   if (!canSpeak){ btn.style.display = 'none'; return; }
   btn.addEventListener('click', () => {
-    voiceOn = !voiceOn;
-    if (!voiceOn) window.speechSynthesis.cancel();
+    const turningOn = !voiceOn;
+    if (turningOn){
+      voiceOn = true;
+      speak('Son actif', { rate: 1 });
+    } else {
+      speak('Son inactif', { rate: 1 }); // annoncé avant la coupure effective
+      voiceOn = false;
+    }
     btn.textContent = voiceOn ? '🔊' : '🔇';
     btn.setAttribute('aria-pressed', String(voiceOn));
     btn.setAttribute('aria-label', voiceOn ? 'Vocalisation activée' : 'Vocalisation coupée');
@@ -575,12 +588,14 @@ function setMode(m){
   mode = m;
   modeFreeBtn.setAttribute('aria-checked', String(m === 'free'));
   modeChronoBtn.setAttribute('aria-checked', String(m === 'chrono'));
+  speak(m === 'free' ? 'Temps libre' : 'Chrono, 5 minutes', { rate: 1 });
 }
 modeFreeBtn.addEventListener('click', () => setMode('free'));
 modeChronoBtn.addEventListener('click', () => setMode('chrono'));
 
 document.getElementById('goBtn').addEventListener('click', () => {
   if (generatingBoard) return;
+  speak('Jouons !', { rate: 1 });
   generatingBoard = true;
   setMsg('Préparation de la grille…');
   document.getElementById('homeScreen').classList.remove('visible');
@@ -590,8 +605,12 @@ document.getElementById('goBtn').addEventListener('click', () => {
   trieWorker.postMessage({ type:'filter', min: MIN_WORDS_ON_BOARD, max: MAX_WORDS_ON_BOARD });
 });
 
-document.getElementById('quitBtn').addEventListener('click', () => endGame());
+document.getElementById('quitBtn').addEventListener('click', () => {
+  speak('Quitter', { rate: 1 });
+  endGame();
+});
 document.getElementById('homeBtn2').addEventListener('click', () => {
+  speak('Accueil', { rate: 1 });
   document.getElementById('endScreen').classList.remove('visible');
   document.getElementById('homeScreen').classList.add('visible');
 });
@@ -676,6 +695,7 @@ function submitWord(){
   if (canSpeak) window.speechSynthesis.cancel(); // priorité au résultat sur les lettres en attente
   if (path.length < MIN_WORD_LEN){
     setFeedback('Mot trop court', 'bad');
+    if (path.length >= 2) speak('trop court', { rate: 1, interrupt: false });
     scheduleClear();
     return;
   }
@@ -799,9 +819,12 @@ function endGame(){
   const list = document.getElementById('foundList');
   list.innerHTML = '';
   [...foundWords].sort().forEach(w => {
-    const span = document.createElement('span');
-    span.textContent = w;
-    list.appendChild(span);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = w;
+    btn.setAttribute('aria-label', 'Écouter ' + w);
+    btn.addEventListener('click', () => speak(w.toLowerCase(), { rate: 1 }));
+    list.appendChild(btn);
   });
 }
 
