@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<!-- GROS MOTS — version simplifiée et accessible de Mots-Lierre.
+     100% local, sans compte, sans Firebase. Nécessite un fichier ODS.txt
+     (même dictionnaire que Mots-Lierre) déposé à côté de ce fichier. -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#000000">
+<title>Gros mots</title>
+<style>
+  :root{
+    --bg:#000000;
+    --fg:#ffffff;
+    --accent:#ffd400;   /* jaune : contraste maximal sur noir, sans être agressif comme le rouge */
+    --ok:#3ddc73;
+    --bad:#ff5b5b;
+    --tile-bg:#1c1c1c;
+    --tile-border:#4a4a4a;
+    --tile-active:#ffd400;
+    --tile-active-fg:#000000;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ height:100%; margin:0; }
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-weight:800;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+    touch-action:none;
+  }
+  h1,h2,p,button{ margin:0; }
+  button{
+    font-family:inherit;
+    font-weight:900;
+    border:none;
+    cursor:pointer;
+    color:inherit;
+  }
+  button:focus-visible, [role="radio"]:focus-visible{
+    outline:4px solid var(--accent);
+    outline-offset:3px;
+  }
+  .screen{
+    position:fixed; inset:0;
+    display:none;
+    flex-direction:column;
+    align-items:center;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+  }
+  .screen.visible{ display:flex; }
+
+  /* ══ LOADING ══ */
+  #loadingScreen{ justify-content:center; gap:28px; }
+  #loadingScreen h1{
+    font-size: clamp(2.2rem, 11vw, 3.6rem);
+    letter-spacing:.03em;
+    text-align:center;
+  }
+  #loadingMsg{
+    font-size: clamp(1rem, 4.5vw, 1.3rem);
+    font-weight:700;
+    text-align:center;
+    color:var(--fg);
+  }
+  .bar-wrap{ width:min(85vw,420px); height:16px; background:#2a2a2a; border-radius:8px; overflow:hidden; border:2px solid #4a4a4a; }
+  #progressBar{ height:100%; width:0%; background:var(--accent); transition:width .2s; }
+  #loadingError{ color:var(--bad); font-size:1.1rem; font-weight:700; text-align:center; max-width:90vw; display:none; }
+
+  /* ══ HOME ══ */
+  #homeScreen{ justify-content:flex-start; gap: clamp(18px,4vh,32px); padding-top: max(28px, env(safe-area-inset-top)); }
+  #homeScreen h1{
+    font-size: clamp(2.6rem, 13vw, 4.2rem);
+    letter-spacing:.02em;
+    text-align:center;
+    line-height:1;
+  }
+  .mode-group{
+    width:100%; max-width:560px;
+    display:flex; flex-direction:column; gap:16px;
+  }
+  .mode-label{
+    font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+    text-align:center;
+    color:#cfcfcf;
+    font-weight:700;
+    letter-spacing:.04em;
+  }
+  .mode-btn{
+    width:100%;
+    padding: clamp(20px,5vh,28px) 16px;
+    background:var(--tile-bg);
+    border:4px solid var(--tile-border);
+    border-radius:20px;
+    font-size: clamp(1.5rem, 7vw, 2.1rem);
+    text-align:center;
+    line-height:1.15;
+  }
+  .mode-btn .sub{
+    display:block;
+    font-size: clamp(.95rem, 4vw, 1.15rem);
+    font-weight:700;
+    color:#bdbdbd;
+    margin-top:6px;
+    letter-spacing:.02em;
+  }
+  .mode-btn[aria-checked="true"]{
+    border-color: var(--accent);
+    background: #2a2408;
+  }
+  .mode-btn[aria-checked="true"] .sub{ color:#f0dfa0; }
+
+  #goBtn{
+    width:100%; max-width:560px;
+    margin-top:auto;
+    margin-bottom: clamp(8px,3vh,20px);
+    padding: clamp(26px,6vh,36px) 0;
+    background:var(--accent);
+    color:#000;
+    border-radius:24px;
+    font-size: clamp(2.4rem, 11vw, 3.4rem);
+    letter-spacing:.05em;
+  }
+  #goBtn:active{ transform:scale(0.97); }
+
+  /* ══ GAME ══ */
+  #gameScreen{ gap:12px; padding-top:max(14px, env(safe-area-inset-top)); }
+  .game-top{
+    width:100%; max-width:560px;
+    display:flex; justify-content:space-between; align-items:center;
+    gap:10px;
+  }
+  #quitBtn{
+    background:#2a2a2a; color:var(--fg);
+    border:3px solid #4a4a4a;
+    border-radius:14px;
+    padding:10px 18px;
+    font-size: clamp(1rem, 4vw, 1.2rem);
+  }
+  #voiceToggleBtn{
+    background:#2a2a2a; color:var(--fg);
+    border:3px solid #4a4a4a;
+    border-radius:14px;
+    width: clamp(48px, 12vw, 60px);
+    height: clamp(48px, 12vw, 60px);
+    font-size: clamp(1.3rem, 5.5vw, 1.7rem);
+    flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #voiceToggleBtn[aria-pressed="false"]{
+    background:#1a1a1a; color:#777; border-color:#3a3a3a;
+  }
+  #timerDisplay, #foundCount{
+    font-size: clamp(1.4rem, 6.5vw, 2rem);
+    font-variant-numeric: tabular-nums;
+    text-align:center;
+  }
+  #timerDisplay.low{ color:var(--bad); }
+
+  #currentWord{
+    min-height: clamp(2.4rem, 9vw, 3.4rem);
+    font-size: clamp(1.8rem, 8.5vw, 2.8rem);
+    letter-spacing:.08em;
+    text-align:center;
+    color:var(--accent);
+    width:100%;
+  }
+  #feedback{
+    min-height:1.6em;
+    font-size: clamp(1.1rem, 5vw, 1.5rem);
+    text-align:center;
+    font-weight:800;
+  }
+  #feedback.ok{ color:var(--ok); }
+  #feedback.bad{ color:var(--bad); }
+
+  #board{
+    display:grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 8px;
+    width:min(94vw, 92dvh, 520px);
+    aspect-ratio:1/1;
+    touch-action:none;
+  }
+  .tile{
+    display:flex; align-items:center; justify-content:center;
+    background:var(--tile-bg);
+    border:3px solid var(--tile-border);
+    border-radius:14px;
+    font-size: clamp(1.8rem, 9vw, 3.2rem);
+    color:var(--fg);
+  }
+  .tile.sel{
+    background:var(--tile-active);
+    color:var(--tile-active-fg);
+    border-color:var(--tile-active);
+  }
+  .tile.order{
+    position:relative;
+  }
+
+  .game-actions{
+    width:100%; max-width:560px;
+    display:flex; gap:12px;
+    margin-top:auto;
+    margin-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .game-actions button{
+    flex:1;
+    padding: clamp(16px,4vh,22px) 8px;
+    border-radius:16px;
+    font-size: clamp(1.2rem, 5.5vw, 1.6rem);
+  }
+  #clearBtn{ background:#2a2a2a; color:var(--fg); border:3px solid #4a4a4a; }
+  #validateBtn{ background:var(--accent); color:#000; }
+
+  /* ══ END ══ */
+  #endScreen{ justify-content:flex-start; gap:18px; padding-top:max(28px, env(safe-area-inset-top)); }
+  #endScreen h2{
+    font-size: clamp(1.8rem, 8vw, 2.6rem);
+    text-align:center;
+  }
+  #endCount{
+    font-size: clamp(3rem, 16vw, 5rem);
+    color:var(--accent);
+    text-align:center;
+    line-height:1;
+  }
+  #endCountLabel{
+    font-size: clamp(1.1rem, 4.5vw, 1.4rem);
+    text-align:center;
+    color:#cfcfcf;
+  }
+  #foundList{
+    width:100%; max-width:560px;
+    flex:1;
+    overflow-y:auto;
+    display:flex; flex-wrap:wrap;
+    gap:8px;
+    align-content:flex-start;
+    padding:14px 4px;
+    border-top:3px solid #333;
+    border-bottom:3px solid #333;
+  }
+  #foundList span{
+    background:var(--tile-bg);
+    border:2px solid var(--tile-border);
+    border-radius:10px;
+    padding:8px 12px;
+    font-size: clamp(1rem, 4.5vw, 1.3rem);
+    letter-spacing:.03em;
+  }
+  .end-actions{
+    width:100%; max-width:560px;
+    display:flex; gap:12px;
+    margin-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .end-actions button{
+    flex:1;
+    padding: clamp(18px,4.5vh,24px) 8px;
+    border-radius:16px;
+    font-size: clamp(1.2rem, 5.5vw, 1.6rem);
+  }
+  #replayBtn{ background:var(--accent); color:#000; }
+  #homeBtn2{ background:#2a2a2a; color:var(--fg); border:3px solid #4a4a4a; }
+
+  .sr-only{
+    position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+    overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ CHARGEMENT ══ -->
+<div id="loadingScreen" class="screen visible">
+  <h1>GROS MOTS</h1>
+  <p id="loadingMsg">Chargement du dictionnaire…</p>
+  <div class="bar-wrap"><div id="progressBar"></div></div>
+  <p id="loadingError" role="alert"></p>
+</div>
+
+<!-- ══ ACCUEIL ══ -->
+<div id="homeScreen" class="screen">
+  <h1>GROS MOTS</h1>
+  <div class="mode-group" role="radiogroup" aria-label="Choix du mode de jeu">
+    <p class="mode-label">Choisissez un mode</p>
+    <button type="button" class="mode-btn" id="modeFreeBtn" role="radio" aria-checked="true">
+      TEMPS LIBRE
+      <span class="sub">Aucune limite de temps</span>
+    </button>
+    <button type="button" class="mode-btn" id="modeChronoBtn" role="radio" aria-checked="false">
+      CHRONO
+      <span class="sub">5 minutes</span>
+    </button>
+  </div>
+  <button type="button" id="goBtn">GO !</button>
+</div>
+
+<!-- ══ JEU ══ -->
+<div id="gameScreen" class="screen">
+  <div class="game-top">
+    <button type="button" id="quitBtn">Quitter</button>
+    <div id="timerDisplay" aria-live="off"></div>
+    <button type="button" id="voiceToggleBtn" aria-pressed="true" aria-label="Vocalisation activée">🔊</button>
+    <div id="foundCount" aria-live="polite">0 mot</div>
+  </div>
+  <div id="currentWord" aria-live="off">&nbsp;</div>
+  <div id="feedback" role="status" aria-live="polite">&nbsp;</div>
+  <div id="board" role="grid" aria-label="Grille de lettres"></div>
+  <div class="game-actions">
+    <button type="button" id="clearBtn">EFFACER</button>
+    <button type="button" id="validateBtn">VALIDER</button>
+  </div>
+</div>
+
+<!-- ══ FIN ══ -->
+<div id="endScreen" class="screen">
+  <h2>Partie terminée</h2>
+  <div id="endCount">0</div>
+  <div id="endCountLabel">mot trouvé</div>
+  <div id="foundList"></div>
+  <div class="end-actions">
+    <button type="button" id="homeBtn2">Accueil</button>
+    <button type="button" id="replayBtn">REJOUER</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ══════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════
+const CHRONO_SECONDS = 5 * 60;
+const MIN_WORDS_ON_BOARD = 50;   // toute grille générée aura au moins 50 mots trouvables
+const MAX_WORDS_ON_BOARD = 130;
+const MIN_WORD_LEN = 3;
+
+const FRENCH_DICE = [
+  'AELMNU','AEHLOS','AINOTW','ABORTU','EILTUZ','AEIPSV','AEINRT',
+  'EIORTY','ADEILS','ACEINO','ACELRS','EJLRST','EIPRSU','AEKOQS',
+  'ACFNTX','CEGILR'
+];
+
+const normalize = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+
+// ══════════════════════════════════════════════════════════
+// VOCALISATION (Web Speech API)
+// ══════════════════════════════════════════════════════════
+let voiceOn = true;
+const canSpeak = 'speechSynthesis' in window;
+let audioCtx = null;
+
+function speak(text, { rate = 1, interrupt = true } = {}){
+  if (!canSpeak || !voiceOn || !text) return;
+  if (interrupt) window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'fr-FR';
+  u.rate = rate;
+  u.volume = 1; // toujours au volume maximum autorisé par le réglage système
+  window.speechSynthesis.speak(u);
+}
+
+function getAudioCtx(){
+  if (!audioCtx){
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    audioCtx = new AC();
+  }
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+// Petit son de défaite (descente de fréquence), synthétisé, joué au volume maximum
+function playDefeatSound(){
+  if (!voiceOn) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  try{
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(85, now + 0.35);
+    gain.gain.setValueAtTime(1, now); // volume maximum
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.36);
+  }catch(e){ /* silencieux si l'audio échoue */ }
+}
+
+function initVoiceToggle(){
+  const btn = document.getElementById('voiceToggleBtn');
+  if (!canSpeak){ btn.style.display = 'none'; return; }
+  btn.addEventListener('click', () => {
+    voiceOn = !voiceOn;
+    if (!voiceOn) window.speechSynthesis.cancel();
+    btn.textContent = voiceOn ? '🔊' : '🔇';
+    btn.setAttribute('aria-pressed', String(voiceOn));
+    btn.setAttribute('aria-label', voiceOn ? 'Vocalisation activée' : 'Vocalisation coupée');
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// DICTIONNAIRE
+// ══════════════════════════════════════════════════════════
+const dictionary = new Set();
+let trieWorker = null;
+
+function setMsg(t){ document.getElementById('loadingMsg').textContent = t; }
+function setBar(p){ document.getElementById('progressBar').style.width = p + '%'; }
+function showLoadError(msg){
+  const el = document.getElementById('loadingError');
+  el.textContent = msg;
+  el.style.display = 'block';
+  document.querySelector('.bar-wrap').style.display = 'none';
+  setMsg('Erreur de chargement');
+}
+
+async function loadDictionary(){
+  setMsg('Chargement du dictionnaire…'); setBar(5);
+  let text;
+  try{
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+    const resp = await fetch('ODS.txt', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) throw new Error(`ODS.txt introuvable (HTTP ${resp.status})`);
+    setBar(30);
+    text = await resp.text();
+    setBar(55);
+  }catch(e){
+    if (e.name === 'AbortError'){
+      showLoadError('Le dictionnaire met trop de temps à charger. Vérifiez votre connexion.');
+    }else{
+      showLoadError('Impossible de charger ODS.txt. Ce fichier doit être présent à côté de index.html.');
+    }
+    return;
+  }
+
+  setMsg('Préparation des mots…'); setBar(60);
+  const lines = text.replace(/\r/g,'').split('\n');
+  for (let i=0; i<lines.length; i++){
+    const w = lines[i].trim();
+    if (w.length >= MIN_WORD_LEN && w.length <= 16) dictionary.add(normalize(w));
+    if (i % 60000 === 0) { setBar(60 + Math.min(25, (i/lines.length*25)|0)); await new Promise(r=>setTimeout(r,0)); }
+  }
+  setBar(90);
+  setMsg('Préparation de la grille…');
+  buildTrieInWorker(dictionary);
+}
+
+// ══════════════════════════════════════════════════════════
+// WORKER — construction du trie + génération de grilles valides
+// (garantit au minimum MIN_WORDS_ON_BOARD mots trouvables)
+// ══════════════════════════════════════════════════════════
+function buildTrieInWorker(words){
+  const workerCode = `
+    function buildTrie(words){
+      const root = Object.create(null);
+      for (const w of words){
+        let node = root;
+        for (const ch of w){
+          if (!node[ch]) node[ch] = Object.create(null);
+          node = node[ch];
+        }
+        node['$'] = true;
+      }
+      return root;
+    }
+    function analyzeBoard(board, trie){
+      const N = 4;
+      const adj = [];
+      for (let i=0;i<16;i++){
+        adj[i] = [];
+        const r = Math.floor(i/N), c = i % N;
+        for (let j=0;j<16;j++){
+          const dr = Math.abs(r - Math.floor(j/N)), dc = Math.abs(c - j%N);
+          if (dr<=1 && dc<=1 && i!==j) adj[i].push(j);
+        }
+      }
+      const found = new Set();
+      function dfs(idx, path, node, word){
+        if (word.length >= 3 && node['$']) found.add(word);
+        for (const nb of adj[idx]){
+          if (path.includes(nb)) continue;
+          const ch = board[nb];
+          if (!node[ch]) continue;
+          path.push(nb);
+          dfs(nb, path, node[ch], word + ch);
+          path.pop();
+        }
+      }
+      for (let i=0;i<16;i++){
+        const ch = board[i];
+        if (!trie[ch]) continue;
+        dfs(i, [i], trie[ch], ch);
+      }
+      return { wordCount: found.size };
+    }
+    const DICE = ${JSON.stringify(FRENCH_DICE)};
+    function randomBoard(){
+      const dice = [...DICE];
+      for (let i=dice.length-1;i>0;i--){ const j = Math.random()*(i+1)|0; [dice[i],dice[j]]=[dice[j],dice[i]]; }
+      return dice.map(d => d[Math.random()*d.length|0]);
+    }
+    let _trie = null;
+    self.onmessage = function(e){
+      const { type, words, min, max } = e.data;
+      if (type === 'build'){
+        _trie = buildTrie(words);
+        self.postMessage({ type: 'ready' });
+      } else if (type === 'filter'){
+        const MAX_ATTEMPTS = 400;
+        let best = null;
+        for (let attempt=0; attempt<MAX_ATTEMPTS; attempt++){
+          const candidate = randomBoard();
+          const { wordCount } = analyzeBoard(candidate, _trie);
+          if (!best || wordCount > best.wordCount) best = { board: candidate, wordCount };
+          if (wordCount >= min && wordCount <= max){
+            self.postMessage({ type:'filtered', board: candidate, wordCount, attempt: attempt+1 });
+            return;
+          }
+        }
+        // Repli : la grille avec le plus grand nombre de mots parmi les essais
+        self.postMessage({ type:'filtered', board: best.board, wordCount: best.wordCount, attempt: MAX_ATTEMPTS, fallback:true });
+      }
+    };
+  `;
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  trieWorker = new Worker(URL.createObjectURL(blob));
+  trieWorker.onmessage = (e) => {
+    if (e.data.type === 'ready'){
+      onDictionaryReady();
+    } else if (e.data.type === 'filtered'){
+      if (e.data.wordCount < MIN_WORDS_ON_BOARD){
+        console.warn('Grille de secours avec seulement', e.data.wordCount, 'mots');
+      }
+      onBoardGenerated(e.data.board);
+    }
+  };
+  trieWorker.postMessage({ type: 'build', words: [...words] });
+}
+
+function onDictionaryReady(){
+  setBar(100);
+  setMsg('Prêt !');
+  document.getElementById('loadingScreen').classList.remove('visible');
+  document.getElementById('homeScreen').classList.add('visible');
+}
+
+// ══════════════════════════════════════════════════════════
+// ÉTAT DU JEU
+// ══════════════════════════════════════════════════════════
+let mode = 'free';           // 'free' | 'chrono'
+let board = [];              // 16 lettres
+let path = [];                // indices sélectionnés
+let foundWords = new Set();
+let timerInterval = null;
+let secondsLeft = 0;
+let secondsElapsed = 0;
+let generatingBoard = false;
+
+function onBoardGenerated(newBoard){
+  board = newBoard;
+  generatingBoard = false;
+  renderBoard();
+  startTimer();
+  document.getElementById('loadingScreen').classList.remove('visible');
+  document.getElementById('homeScreen').classList.remove('visible');
+  document.getElementById('endScreen').classList.remove('visible');
+  document.getElementById('gameScreen').classList.add('visible');
+}
+
+// ══════════════════════════════════════════════════════════
+// NAVIGATION / MODE
+// ══════════════════════════════════════════════════════════
+const modeFreeBtn = document.getElementById('modeFreeBtn');
+const modeChronoBtn = document.getElementById('modeChronoBtn');
+
+function setMode(m){
+  mode = m;
+  modeFreeBtn.setAttribute('aria-checked', String(m === 'free'));
+  modeChronoBtn.setAttribute('aria-checked', String(m === 'chrono'));
+}
+modeFreeBtn.addEventListener('click', () => setMode('free'));
+modeChronoBtn.addEventListener('click', () => setMode('chrono'));
+
+document.getElementById('goBtn').addEventListener('click', () => {
+  if (generatingBoard) return;
+  generatingBoard = true;
+  setMsg('Préparation de la grille…');
+  document.getElementById('homeScreen').classList.remove('visible');
+  document.getElementById('loadingScreen').classList.add('visible');
+  document.querySelector('.bar-wrap').style.display = 'none';
+  document.getElementById('loadingError').style.display = 'none';
+  trieWorker.postMessage({ type:'filter', min: MIN_WORDS_ON_BOARD, max: MAX_WORDS_ON_BOARD });
+});
+
+document.getElementById('quitBtn').addEventListener('click', () => endGame());
+document.getElementById('homeBtn2').addEventListener('click', () => {
+  document.getElementById('endScreen').classList.remove('visible');
+  document.getElementById('homeScreen').classList.add('visible');
+});
+document.getElementById('replayBtn').addEventListener('click', () => {
+  document.getElementById('endScreen').classList.remove('visible');
+  document.getElementById('goBtn').click();
+});
+
+// ══════════════════════════════════════════════════════════
+// GRILLE / SÉLECTION
+// ══════════════════════════════════════════════════════════
+const boardEl = document.getElementById('board');
+const currentWordEl = document.getElementById('currentWord');
+const feedbackEl = document.getElementById('feedback');
+const foundCountEl = document.getElementById('foundCount');
+
+function idxRC(i){ return { r: Math.floor(i/4), c: i % 4 }; }
+function areAdjacent(a, b){
+  const A = idxRC(a), B = idxRC(b);
+  return Math.abs(A.r-B.r) <= 1 && Math.abs(A.c-B.c) <= 1 && a !== b;
+}
+
+function renderBoard(){
+  boardEl.innerHTML = '';
+  path = [];
+  updateCurrentWord();
+  board.forEach((letter, i) => {
+    const t = document.createElement('button');
+    t.type = 'button';
+    t.className = 'tile';
+    t.textContent = letter;
+    t.setAttribute('aria-label', 'Lettre ' + letter);
+    t.dataset.idx = i;
+    boardEl.appendChild(t);
+  });
+}
+
+function tileAt(i){ return boardEl.children[i]; }
+
+function updateCurrentWord(){
+  const word = path.map(i => board[i]).join('');
+  currentWordEl.textContent = word || '\u00A0';
+  [...boardEl.children].forEach((t, i) => t.classList.toggle('sel', path.includes(i)));
+}
+
+function tapTile(i){
+  const last = path[path.length - 1];
+  if (path.length && i === last){
+    // ré-appui sur la dernière lettre → on l'enlève
+    path.pop();
+  } else if (!path.length){
+    path.push(i);
+    speak(board[i], { rate: 1.15 });
+  } else if (!path.includes(i) && areAdjacent(last, i)){
+    path.push(i);
+    speak(board[i], { rate: 1.15 });
+  } else if (!path.includes(i)){
+    // lettre non adjacente : on recommence un nouveau mot avec cette lettre
+    path = [i];
+    speak(board[i], { rate: 1.15 });
+  }
+  updateCurrentWord();
+}
+
+function resetPath(){
+  path = [];
+  updateCurrentWord();
+}
+
+function clearPath(){
+  resetPath();
+  setFeedback('', '');
+}
+
+function setFeedback(msg, kind){
+  feedbackEl.textContent = msg || '\u00A0';
+  feedbackEl.classList.remove('ok','bad');
+  if (kind) feedbackEl.classList.add(kind);
+}
+
+function validateWord(){
+  if (path.length < MIN_WORD_LEN){
+    setFeedback('Mot trop court', 'bad');
+    return;
+  }
+  const word = path.map(i => board[i]).join('');
+  if (foundWords.has(word)){
+    setFeedback(word + ' — déjà trouvé', 'bad');
+    speak(word + ' déjà trouvé', { rate: 1 });
+    return;
+  }
+  if (!dictionary.has(word)){
+    setFeedback(word + ' — inconnu', 'bad');
+    playDefeatSound();
+    return;
+  }
+  foundWords.add(word);
+  foundCountEl.textContent = foundWords.size + (foundWords.size > 1 ? ' mots' : ' mot');
+  setFeedback(word + ' trouvé !', 'ok');
+  speak(word, { rate: 1 });
+  resetPath();
+}
+
+document.getElementById('validateBtn').addEventListener('click', validateWord);
+document.getElementById('clearBtn').addEventListener('click', clearPath);
+
+// tap sur une lettre
+boardEl.addEventListener('click', (e) => {
+  const tile = e.target.closest('.tile');
+  if (!tile) return;
+  tapTile(Number(tile.dataset.idx));
+});
+
+// glisser pour enchaîner les lettres rapidement
+let dragging = false;
+boardEl.addEventListener('pointerdown', (e) => {
+  const tile = e.target.closest('.tile');
+  if (!tile) return;
+  dragging = true;
+  const startIdx = Number(tile.dataset.idx);
+  path = [startIdx];
+  updateCurrentWord();
+  speak(board[startIdx], { rate: 1.15 });
+  e.preventDefault();
+});
+boardEl.addEventListener('pointermove', (e) => {
+  if (!dragging) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const tile = el && el.closest && el.closest('.tile');
+  if (!tile) return;
+  const i = Number(tile.dataset.idx);
+  const last = path[path.length - 1];
+  if (path.length && i === last) return;
+  if (!path.includes(i) && (path.length === 0 || areAdjacent(last, i))){
+    path.push(i);
+    updateCurrentWord();
+    speak(board[i], { rate: 1.15 });
+  }
+});
+window.addEventListener('pointerup', () => { dragging = false; });
+window.addEventListener('pointercancel', () => { dragging = false; });
+
+// ══════════════════════════════════════════════════════════
+// MINUTEUR
+// ══════════════════════════════════════════════════════════
+const timerDisplayEl = document.getElementById('timerDisplay');
+
+function formatTime(s){
+  const m = Math.floor(s/60), r = s % 60;
+  return String(m).padStart(2,'0') + ':' + String(r).padStart(2,'0');
+}
+
+function startTimer(){
+  clearInterval(timerInterval);
+  foundWords = new Set();
+  foundCountEl.textContent = '0 mot';
+  setFeedback('', '');
+
+  if (mode === 'chrono'){
+    secondsLeft = CHRONO_SECONDS;
+    timerDisplayEl.textContent = formatTime(secondsLeft);
+    timerDisplayEl.classList.remove('low');
+    timerInterval = setInterval(() => {
+      secondsLeft--;
+      timerDisplayEl.textContent = formatTime(secondsLeft);
+      if (secondsLeft <= 30) timerDisplayEl.classList.add('low');
+      if (secondsLeft <= 0){
+        clearInterval(timerInterval);
+        endGame();
+      }
+    }, 1000);
+  } else {
+    secondsElapsed = 0;
+    timerDisplayEl.textContent = formatTime(secondsElapsed);
+    timerDisplayEl.classList.remove('low');
+    timerInterval = setInterval(() => {
+      secondsElapsed++;
+      timerDisplayEl.textContent = formatTime(secondsElapsed);
+    }, 1000);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// FIN DE PARTIE
+// ══════════════════════════════════════════════════════════
+function endGame(){
+  clearInterval(timerInterval);
+  document.getElementById('gameScreen').classList.remove('visible');
+  document.getElementById('endScreen').classList.add('visible');
+  const n = foundWords.size;
+  document.getElementById('endCount').textContent = n;
+  document.getElementById('endCountLabel').textContent = n > 1 ? 'mots trouvés' : 'mot trouvé';
+  const list = document.getElementById('foundList');
+  list.innerHTML = '';
+  [...foundWords].sort().forEach(w => {
+    const span = document.createElement('span');
+    span.textContent = w;
+    list.appendChild(span);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// DÉMARRAGE
+// ══════════════════════════════════════════════════════════
+initVoiceToggle();
+loadDictionary();
+</script>
+</body>
+</html>
