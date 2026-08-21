@@ -181,41 +181,32 @@
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(4, 1fr);
     gap: 8px;
-    width:min(94vw, 92dvh, 520px);
+    width:min(96vw, 84dvh, 620px);
     aspect-ratio:1/1;
     touch-action:none;
+    position:relative;
+    margin-top:auto;
+    margin-bottom:auto;
+  }
+  #pathSvg{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    pointer-events:none;
   }
   .tile{
     display:flex; align-items:center; justify-content:center;
     background:var(--tile-bg);
     border:3px solid var(--tile-border);
     border-radius:14px;
-    font-size: clamp(1.8rem, 9vw, 3.2rem);
+    font-size: clamp(2.4rem, 13vw, 5rem);
     color:var(--fg);
+    position:relative;
   }
   .tile.sel{
     background:var(--tile-active);
     color:var(--tile-active-fg);
     border-color:var(--tile-active);
   }
-  .tile.order{
-    position:relative;
-  }
-
-  .game-actions{
-    width:100%; max-width:560px;
-    display:flex; gap:12px;
-    margin-top:auto;
-    margin-bottom: max(10px, env(safe-area-inset-bottom));
-  }
-  .game-actions button{
-    flex:1;
-    padding: clamp(16px,4vh,22px) 8px;
-    border-radius:16px;
-    font-size: clamp(1.2rem, 5.5vw, 1.6rem);
-  }
-  #clearBtn{ background:#2a2a2a; color:var(--fg); border:3px solid #4a4a4a; }
-  #validateBtn{ background:var(--accent); color:#000; }
 
   /* ══ END ══ */
   #endScreen{ justify-content:flex-start; gap:18px; padding-top:max(28px, env(safe-area-inset-top)); }
@@ -311,10 +302,6 @@
   <div id="currentWord" aria-live="off">&nbsp;</div>
   <div id="feedback" role="status" aria-live="polite">&nbsp;</div>
   <div id="board" role="grid" aria-label="Grille de lettres"></div>
-  <div class="game-actions">
-    <button type="button" id="clearBtn">EFFACER</button>
-    <button type="button" id="validateBtn">VALIDER</button>
-  </div>
 </div>
 
 <!-- ══ FIN ══ -->
@@ -630,7 +617,6 @@ function areAdjacent(a, b){
 function renderBoard(){
   boardEl.innerHTML = '';
   path = [];
-  updateCurrentWord();
   board.forEach((letter, i) => {
     const t = document.createElement('button');
     t.type = 'button';
@@ -640,43 +626,34 @@ function renderBoard(){
     t.dataset.idx = i;
     boardEl.appendChild(t);
   });
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('id', 'pathSvg');
+  svg.setAttribute('viewBox', '0 0 4 4');
+  svg.setAttribute('preserveAspectRatio', 'none');
+  boardEl.appendChild(svg);
+  updateCurrentWord();
 }
-
-function tileAt(i){ return boardEl.children[i]; }
 
 function updateCurrentWord(){
   const word = path.map(i => board[i]).join('');
   currentWordEl.textContent = word || '\u00A0';
-  [...boardEl.children].forEach((t, i) => t.classList.toggle('sel', path.includes(i)));
+  [...boardEl.querySelectorAll('.tile')].forEach((t, i) => t.classList.toggle('sel', path.includes(i)));
+  renderPathLine();
 }
 
-function tapTile(i){
-  const last = path[path.length - 1];
-  if (path.length && i === last){
-    // ré-appui sur la dernière lettre → on l'enlève
-    path.pop();
-  } else if (!path.length){
-    path.push(i);
-    speak(board[i], { rate: 1.15 });
-  } else if (!path.includes(i) && areAdjacent(last, i)){
-    path.push(i);
-    speak(board[i], { rate: 1.15 });
-  } else if (!path.includes(i)){
-    // lettre non adjacente : on recommence un nouveau mot avec cette lettre
-    path = [i];
-    speak(board[i], { rate: 1.15 });
-  }
-  updateCurrentWord();
+function renderPathLine(){
+  const svg = document.getElementById('pathSvg');
+  if (!svg) return;
+  if (path.length < 2){ svg.innerHTML = ''; return; }
+  const pts = path.map(i => { const { r, c } = idxRC(i); return (c + 0.5) + ',' + (r + 0.5); }).join(' ');
+  svg.innerHTML =
+    '<polyline points="' + pts + '" fill="none" stroke="#000" stroke-opacity="0.55" stroke-width="0.26" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<polyline points="' + pts + '" fill="none" stroke="var(--accent)" stroke-width="0.13" stroke-linecap="round" stroke-linejoin="round"/>';
 }
 
 function resetPath(){
   path = [];
   updateCurrentWord();
-}
-
-function clearPath(){
-  resetPath();
-  setFeedback('', '');
 }
 
 function setFeedback(msg, kind){
@@ -685,49 +662,56 @@ function setFeedback(msg, kind){
   if (kind) feedbackEl.classList.add(kind);
 }
 
-function validateWord(){
+let clearTimeoutId = null;
+function scheduleClear(){
+  if (clearTimeoutId) clearTimeout(clearTimeoutId);
+  clearTimeoutId = setTimeout(() => {
+    resetPath();
+    setFeedback('', '');
+    clearTimeoutId = null;
+  }, 500);
+}
+
+function submitWord(){
+  if (canSpeak) window.speechSynthesis.cancel(); // priorité au résultat sur les lettres en attente
   if (path.length < MIN_WORD_LEN){
     setFeedback('Mot trop court', 'bad');
+    scheduleClear();
     return;
   }
   const word = path.map(i => board[i]).join('');
   if (foundWords.has(word)){
     setFeedback(word + ' — déjà trouvé', 'bad');
-    speak(word + ' déjà trouvé', { rate: 1 });
+    speak(word + ' déjà trouvé', { rate: 1, interrupt: false });
+    scheduleClear();
     return;
   }
   if (!dictionary.has(word)){
     setFeedback(word + ' — inconnu', 'bad');
     playDefeatSound();
+    scheduleClear();
     return;
   }
   foundWords.add(word);
   foundCountEl.textContent = foundWords.size + (foundWords.size > 1 ? ' mots' : ' mot');
   setFeedback(word + ' trouvé !', 'ok');
-  speak(word, { rate: 1 });
-  resetPath();
+  speak(word + ' trouvé', { rate: 1, interrupt: false });
+  scheduleClear();
 }
 
-document.getElementById('validateBtn').addEventListener('click', validateWord);
-document.getElementById('clearBtn').addEventListener('click', clearPath);
-
-// tap sur une lettre
-boardEl.addEventListener('click', (e) => {
-  const tile = e.target.closest('.tile');
-  if (!tile) return;
-  tapTile(Number(tile.dataset.idx));
-});
-
-// glisser pour enchaîner les lettres rapidement
+// glisser pour tracer le mot ; relâcher = valider automatiquement
 let dragging = false;
 boardEl.addEventListener('pointerdown', (e) => {
   const tile = e.target.closest('.tile');
   if (!tile) return;
+  if (clearTimeoutId){ clearTimeout(clearTimeoutId); clearTimeoutId = null; }
+  if (canSpeak) window.speechSynthesis.cancel();
   dragging = true;
   const startIdx = Number(tile.dataset.idx);
   path = [startIdx];
+  setFeedback('', '');
   updateCurrentWord();
-  speak(board[startIdx], { rate: 1.15 });
+  speak(board[startIdx], { rate: 1.25, interrupt: false });
   e.preventDefault();
 });
 boardEl.addEventListener('pointermove', (e) => {
@@ -738,14 +722,29 @@ boardEl.addEventListener('pointermove', (e) => {
   const i = Number(tile.dataset.idx);
   const last = path[path.length - 1];
   if (path.length && i === last) return;
+  if (path.length >= 2 && i === path[path.length - 2]){
+    // retour en arrière : on annule la dernière lettre
+    path.pop();
+    updateCurrentWord();
+    return;
+  }
   if (!path.includes(i) && (path.length === 0 || areAdjacent(last, i))){
     path.push(i);
     updateCurrentWord();
-    speak(board[i], { rate: 1.15 });
+    speak(board[i], { rate: 1.25, interrupt: false });
   }
 });
-window.addEventListener('pointerup', () => { dragging = false; });
-window.addEventListener('pointercancel', () => { dragging = false; });
+window.addEventListener('pointerup', () => {
+  if (dragging){
+    dragging = false;
+    submitWord();
+  }
+});
+window.addEventListener('pointercancel', () => {
+  dragging = false;
+  resetPath();
+  setFeedback('', '');
+});
 
 // ══════════════════════════════════════════════════════════
 // MINUTEUR
